@@ -10,7 +10,7 @@ const router = express.Router();
 // Get user dashboard with real-time data
 router.get('/dashboard', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user._id);
     if (!user) {
       return res.status(404).json({
         success: false,
@@ -48,6 +48,8 @@ router.get('/dashboard', auth, async (req, res) => {
 
     // Send real-time dashboard update
     realtimeService.updateDashboard(user._id, dashboardData);
+
+    console.log('Dashboard response:', { success: true, data: dashboardData });
 
     res.json({
       success: true,

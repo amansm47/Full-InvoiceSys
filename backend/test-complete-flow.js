@@ -1,6 +1,6 @@
 const axios = require('axios');
 
-const BASE_URL = 'http://localhost:5003/api';
+const BASE_URL = 'http://localhost:5005/api';
 
 async function setupTestUsers() {
   const users = {

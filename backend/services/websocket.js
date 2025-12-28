@@ -38,15 +38,15 @@ class WebSocketService {
   
   // Notify all investors about new invoice
   notifyInvestors(invoice) {
+    console.log('Broadcasting new invoice to investors:', invoice.invoiceNumber);
     this.io.emit('newInvoiceListed', {
       id: invoice._id,
       invoiceNumber: invoice.invoiceNumber,
       amount: invoice.amount,
-      discountedAmount: invoice.discountedAmount,
-      seller: invoice.seller?.name,
-      buyer: invoice.buyer?.name,
-      riskScore: invoice.riskScore,
-      dueDate: invoice.dueDate
+      seller: invoice.seller,
+      buyer: invoice.buyer,
+      dueDate: invoice.dueDate,
+      timestamp: new Date()
     });
   }
   

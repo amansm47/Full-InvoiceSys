@@ -9,8 +9,8 @@ import EnhancedHomePage from './pages/EnhancedHomePage';
 import EnhancedLogin from './pages/EnhancedLogin';
 import EnhancedRegister from './pages/EnhancedRegister';
 import Dashboard from './pages/Dashboard';
-import EnhancedInvestorDashboard from './pages/NewInvestorDashboard';
-import EnhancedSellerDashboard from './pages/NewSellerDashboard';
+import NewInvestorDashboard from './pages/NewInvestorDashboard';
+import NewSellerDashboard from './pages/NewSellerDashboard';
 import CreateInvoice from './pages/CreateInvoice';
 import Marketplace from './pages/Marketplace';
 import Portfolio from './pages/Portfolio';
@@ -211,7 +211,9 @@ function AppRoutes() {
           <Route path="/register" element={<EnhancedRegister />} />
           <Route path="/dashboard" element={
             <ProtectedRoute>
-              {user?.role === 'investor' ? <EnhancedInvestorDashboard /> : user?.role === 'seller' ? <EnhancedSellerDashboard /> : <Dashboard />}
+              {user?.role === 'investor' ? <NewInvestorDashboard /> : 
+               (user?.role === 'seller' || user?.role === 'patient') ? <NewSellerDashboard /> : 
+               <Dashboard />}
             </ProtectedRoute>
           } />
           <Route path="/create-invoice" element={

@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
-  firebaseUid: {
+  googleId: {
     type: String,
     unique: true,
     sparse: true

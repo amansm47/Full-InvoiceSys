@@ -18,11 +18,12 @@ function Register() {
   const navigate = useNavigate();
   const { register } = useAuth();
   const [formData, setFormData] = useState({
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     role: '',
-    businessName: '',
+    company: '',
     password: ''
   });
   const [loading, setLoading] = useState(false);
@@ -59,10 +60,62 @@ function Register() {
     setError('');
     
     try {
-      await register(formData);
+      // Validate required fields
+      if (!formData.firstName || !formData.lastName || !formData.email || 
+          !formData.phone || !formData.company || !formData.role || !formData.password) {
+        throw new Error('Please fill in all required fields');
+      }
+      
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+      
+      // Validate password length
+      if (formData.password.length < 6) {
+        throw new Error('Password must be at least 6 characters long');
+      }
+      
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        profile: {
+          firstName: formData.firstName,
+          lastName: formData.lastName,
+          phone: formData.phone,
+          company: formData.company
+        }
+      };
+      
+      console.log('Sending registration data:', registrationData);
+      await register(registrationData);
       navigate('/dashboard');
     } catch (error) {
-      setError(error.response?.data?.message || 'Registration failed');
+      console.error('Registration error:', error);
+      
+      // Handle specific error cases
+      let errorMessage = 'Registration failed';
+      
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error;
+        
+        // Make error messages more user-friendly
+        if (errorMessage === 'User already exists') {
+          errorMessage = 'An account with this email already exists. Please use a different email or try logging in.';
+        } else if (errorMessage.includes('Missing required fields')) {
+          errorMessage = 'Please fill in all required fields.';
+        } else if (errorMessage.includes('Missing profile fields')) {
+          errorMessage = 'Please complete all profile information.';
+        }
+      } else if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+        errorMessage = 'Cannot connect to server. Please make sure the backend is running.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -115,9 +168,19 @@ function Register() {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Full Name"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  label="First Name"
+                  value={formData.firstName}
+                  onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                  required
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <TextField
+                  fullWidth
+                  label="Last Name"
+                  value={formData.lastName}
+                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                   required
                 />
               </Grid>
@@ -130,6 +193,7 @@ function Register() {
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   required
+                  helperText="Use a unique email address that you haven't registered with before"
                 />
               </Grid>
               
@@ -146,9 +210,10 @@ function Register() {
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
-                  label="Business Name"
-                  value={formData.businessName}
-                  onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+                  label="Company Name"
+                  value={formData.company}
+                  onChange={(e) => setFormData({ ...formData, company: e.target.value })}
+                  required
                 />
               </Grid>
               

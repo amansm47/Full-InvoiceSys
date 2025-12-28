@@ -30,7 +30,8 @@ function Login() {
       await login(formData.email, formData.password);
       navigate('/dashboard');
     } catch (error) {
-      setError(error.response?.data?.message || 'Login failed');
+      console.error('Login error:', error);
+      setError(error.response?.data?.error || error.message || 'Login failed');
     } finally {
       setLoading(false);
     }

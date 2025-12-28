@@ -15,12 +15,22 @@ import CountUp from 'react-countup';
 import { useAuth } from '../context/AuthContext';
 import { userAPI, invoiceAPI, marketplaceAPI } from '../services/api';
 import { useQuery } from 'react-query';
+import { useRealTimeData } from '../hooks/useRealTimeData';
+import RealTimeNotifications from '../components/RealTimeNotifications';
 
 function EnhancedSellerDashboard() {
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('dashboard');
   const [hovered, setHovered] = useState(false);
+  
+  // Real-time data hook
+  const { 
+    isConnected, 
+    realTimeData, 
+    clearNotifications, 
+    removeNotification 
+  } = useRealTimeData();
 
   const links = [
     {
@@ -224,37 +234,58 @@ function EnhancedSellerDashboard() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: hovered ? 'flex-start' : 'center',
+              justifyContent: hovered ? 'space-between' : 'center',
               gap: hovered ? 12 : 0
             }}
           >
-            <Avatar sx={{
-              width: 36,
-              height: 36,
-              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
-              border: '2px solid rgba(139, 92, 246, 0.3)',
-              boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)',
-              fontSize: '14px',
-              fontWeight: 'bold'
-            }}>
-              {user?.name?.charAt(0)}
-            </Avatar>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: hovered ? 2 : 0 }}>
+              <Avatar sx={{
+                width: 36,
+                height: 36,
+                background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                border: '2px solid rgba(139, 92, 246, 0.3)',
+                boxShadow: '0 4px 16px rgba(139, 92, 246, 0.3)',
+                fontSize: '14px',
+                fontWeight: 'bold'
+              }}>
+                {user?.name?.charAt(0)}
+              </Avatar>
+              <AnimatePresence>
+                {hovered && (
+                  <motion.div
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.2, delay: 0.1 }}
+                  >
+                    <Box>
+                      <Typography sx={{ color: 'white', fontWeight: 600, fontSize: '14px' }}>
+                        {user?.name || 'User'}
+                      </Typography>
+                      <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
+                        Seller Account
+                      </Typography>
+                    </Box>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </Box>
+            
+            {/* Real-time notifications */}
             <AnimatePresence>
               {hovered && (
                 <motion.div
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -10 }}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.8 }}
                   transition={{ duration: 0.2, delay: 0.1 }}
                 >
-                  <Box>
-                    <Typography sx={{ color: 'white', fontWeight: 600, fontSize: '14px' }}>
-                      {user?.name || 'User'}
-                    </Typography>
-                    <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
-                      Seller Account
-                    </Typography>
-                  </Box>
+                  <RealTimeNotifications
+                    notifications={realTimeData.notifications}
+                    onClear={clearNotifications}
+                    onRemove={removeNotification}
+                    isConnected={isConnected}
+                  />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -270,6 +301,14 @@ function EnhancedSellerDashboard() {
 
 
 const DashboardContent = ({ activeSection, user, setActiveSection }) => {
+  // Real-time data hook
+  const { 
+    isConnected, 
+    realTimeData, 
+    clearNotifications, 
+    removeNotification 
+  } = useRealTimeData();
+  
   const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError } = useQuery(
     'seller-dashboard', 
     userAPI.getDashboard, 
@@ -332,14 +371,14 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
   const statCards = [
     { 
       title: 'Total Invoices', 
-      value: stats.totalInvoices || 24, 
+      value: stats.totalInvoices || 0, 
       icon: Receipt, 
       color: '#2563eb',
       change: '+12%'
     },
     { 
       title: 'Funded Amount', 
-      value: stats.totalFunded || 450000, 
+      value: stats.totalFunded || 0, 
       icon: AttachMoney, 
       color: '#10b981', 
       prefix: '₹',
@@ -347,7 +386,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     },
     { 
       title: 'Success Rate', 
-      value: stats.successRate || 92, 
+      value: stats.successRate || 0, 
       icon: TrendingUp, 
       color: '#f59e0b', 
       suffix: '%',
@@ -355,7 +394,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     },
     { 
       title: 'Active Invoices', 
-      value: stats.funded || 8, 
+      value: stats.activeInvoices || 0, 
       icon: CheckCircle, 
       color: '#8b5cf6',
       change: '+5'
@@ -384,12 +423,35 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
   const renderDashboard = () => (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
-          Welcome back, {user?.name}! 👋
-        </Typography>
-        <Typography variant="body1" sx={{ color: '#94a3b8' }}>
-          Here's your invoice financing overview
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+              Welcome back, {user?.name}! 👋
+            </Typography>
+            <Typography variant="body1" sx={{ color: '#94a3b8' }}>
+              Here's your invoice financing overview
+            </Typography>
+          </Box>
+          
+          {/* Real-time status */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Chip
+              label={isConnected ? '🟢 Live Data' : '🔴 Offline'}
+              sx={{
+                bgcolor: isConnected ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                color: isConnected ? '#22c55e' : '#ef4444',
+                fontWeight: 600,
+                border: `1px solid ${isConnected ? '#22c55e40' : '#ef444440'}`
+              }}
+            />
+            <RealTimeNotifications
+              notifications={realTimeData.notifications}
+              onClear={clearNotifications}
+              onRemove={removeNotification}
+              isConnected={isConnected}
+            />
+          </Box>
+        </Box>
       </Box>
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -511,7 +573,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
               Recent Invoices
             </Typography>
             <Stack spacing={2}>
-              {invoices.slice(0, 4).map((invoice, index) => {
+              {invoices && invoices.length > 0 ? invoices.slice(0, 4).map((invoice, index) => {
                 const getStatusColor = (status) => {
                   switch (status) {
                     case 'funded': return { bg: 'rgba(34, 197, 94, 0.1)', color: '#22c55e' };
@@ -557,7 +619,13 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
                     </Box>
                   </Box>
                 );
-              })}
+              }) : (
+                <Box sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography sx={{ color: '#94a3b8' }}>
+                    No invoices yet. Create your first invoice to get started!
+                  </Typography>
+                </Box>
+              )}
             </Stack>
           </Card>
         </Grid>
@@ -600,13 +668,14 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
             px: 3,
             py: 1.5
           }}
+          onClick={() => window.location.href = '/create-invoice'}
         >
           Upload New Invoice
         </Button>
       </Box>
 
       <Grid container spacing={3}>
-        {invoices.map((invoice, index) => (
+        {invoices && invoices.length > 0 ? invoices.map((invoice, index) => (
           <Grid item xs={12} md={6} lg={4} key={invoice._id || index}>
             <Card sx={{
               p: 3,
@@ -672,7 +741,35 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
               </Button>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Card sx={{
+              p: 6,
+              textAlign: 'center',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
+              border: '1px solid rgba(139, 92, 246, 0.2)',
+              borderRadius: '16px'
+            }}>
+              <Typography variant="h6" sx={{ color: 'white', mb: 2 }}>
+                📝 No Invoices Yet
+              </Typography>
+              <Typography sx={{ color: '#94a3b8', mb: 3 }}>
+                Create your first invoice to start getting funded by investors
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                sx={{
+                  background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+                  borderRadius: '12px'
+                }}
+                onClick={() => window.location.href = '/create-invoice'}
+              >
+                Create First Invoice
+              </Button>
+            </Card>
+          </Grid>
+        )}
       </Grid>
     </Container>
   );
@@ -686,55 +783,84 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
         Track your performance and growth metrics
       </Typography>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        {[
-          { title: 'Monthly Revenue', value: '₹4,50,000', change: '+15%', color: '#22c55e' },
-          { title: 'Average Funding Time', value: '2.5 days', change: '-20%', color: '#3b82f6' },
-          { title: 'Success Rate', value: '92%', change: '+5%', color: '#8b5cf6' },
-          { title: 'Total Customers', value: '48', change: '+12%', color: '#f59e0b' }
-        ].map((metric, index) => (
-          <Grid item xs={12} sm={6} lg={3} key={index}>
-            <Card sx={{
-              p: 3,
-              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
-              border: '1px solid rgba(139, 92, 246, 0.2)',
-              borderRadius: '16px'
-            }}>
-              <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
-                {metric.title}
-              </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
-                {metric.value}
-              </Typography>
-              <Chip
-                label={metric.change}
-                size="small"
-                sx={{
-                  bgcolor: `${metric.color}20`,
-                  color: metric.color,
-                  fontWeight: 600
-                }}
-              />
-            </Card>
+      {stats.totalInvoices > 0 ? (
+        <>
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {[
+              { title: 'Monthly Revenue', value: `₹${stats.totalFunded?.toLocaleString() || 0}`, change: '+15%', color: '#22c55e' },
+              { title: 'Average Funding Time', value: '2.5 days', change: '-20%', color: '#3b82f6' },
+              { title: 'Success Rate', value: `${stats.successRate || 0}%`, change: '+5%', color: '#8b5cf6' },
+              { title: 'Total Customers', value: stats.totalInvoices || 0, change: '+12%', color: '#f59e0b' }
+            ].map((metric, index) => (
+              <Grid item xs={12} sm={6} lg={3} key={index}>
+                <Card sx={{
+                  p: 3,
+                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
+                  border: '1px solid rgba(139, 92, 246, 0.2)',
+                  borderRadius: '16px'
+                }}>
+                  <Typography variant="body2" sx={{ color: '#94a3b8', mb: 1 }}>
+                    {metric.title}
+                  </Typography>
+                  <Typography variant="h4" sx={{ fontWeight: 700, color: 'white', mb: 1 }}>
+                    {metric.value}
+                  </Typography>
+                  <Chip
+                    label={metric.change}
+                    size="small"
+                    sx={{
+                      bgcolor: `${metric.color}20`,
+                      color: metric.color,
+                      fontWeight: 600
+                    }}
+                  />
+                </Card>
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
 
-      <Card sx={{
-        p: 4,
-        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
-        border: '1px solid rgba(139, 92, 246, 0.2)',
-        borderRadius: '16px'
-      }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, color: 'white', mb: 3 }}>
-          Revenue Trend (Last 6 Months)
-        </Typography>
-        <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography sx={{ color: '#94a3b8' }}>
-            Chart visualization would be implemented here with real data
+          <Card sx={{
+            p: 4,
+            background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
+            border: '1px solid rgba(139, 92, 246, 0.2)',
+            borderRadius: '16px'
+          }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: 'white', mb: 3 }}>
+              Revenue Trend (Based on Your Data)
+            </Typography>
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Typography sx={{ color: '#94a3b8' }}>
+                Analytics will show here as you create more invoices
+              </Typography>
+            </Box>
+          </Card>
+        </>
+      ) : (
+        <Card sx={{
+          p: 6,
+          textAlign: 'center',
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%)',
+          border: '1px solid rgba(139, 92, 246, 0.2)',
+          borderRadius: '16px'
+        }}>
+          <Typography variant="h6" sx={{ color: 'white', mb: 2 }}>
+            📊 No Analytics Data Yet
           </Typography>
-        </Box>
-      </Card>
+          <Typography sx={{ color: '#94a3b8', mb: 3 }}>
+            Create and fund invoices to see detailed analytics and performance metrics
+          </Typography>
+          <Button
+            variant="contained"
+            sx={{
+              background: 'linear-gradient(135deg, #8b5cf6, #3b82f6)',
+              borderRadius: '12px'
+            }}
+            onClick={() => setActiveSection('invoices')}
+          >
+            Create Your First Invoice
+          </Button>
+        </Card>
+      )}
     </Container>
   );
 

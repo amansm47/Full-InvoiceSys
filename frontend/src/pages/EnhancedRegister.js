@@ -63,10 +63,39 @@ function EnhancedRegister() {
     setError('');
     
     try {
-      await register(formData);
+      // Validate required fields
+      if (!formData.name || !formData.email || !formData.password || !formData.role) {
+        throw new Error('Please fill in all required fields');
+      }
+      
+      if (!formData.phone || !formData.company) {
+        throw new Error('Please complete your profile information');
+      }
+      
+      if (formData.password !== formData.confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
+      
+      // Transform data to match backend expectations
+      const [firstName, ...lastNameParts] = formData.name.split(' ');
+      const lastName = lastNameParts.join(' ') || firstName;
+      
+      const registrationData = {
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+        profile: {
+          firstName: firstName,
+          lastName: lastName,
+          phone: formData.phone,
+          company: formData.company
+        }
+      };
+      
+      await register(registrationData);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Registration failed');
+      setError(err.message || 'Registration failed');
     } finally {
       setLoading(false);
     }
@@ -266,6 +295,7 @@ function EnhancedRegister() {
                 label="Phone Number"
                 value={formData.phone}
                 onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                required
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
@@ -280,6 +310,7 @@ function EnhancedRegister() {
                 label="Company Name"
                 value={formData.company}
                 onChange={(e) => setFormData({...formData, company: e.target.value})}
+                required
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">

@@ -1,38 +1,124 @@
 const express = require('express');
-const admin = require('../config/firebase');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const passport = require('passport');
 const User = require('../models/User');
 const { authenticateToken } = require('../middleware/auth');
+const auth = require('../config/auth');
+
+// Initialize Google OAuth
+auth.initializeGoogleAuth();
 
 const router = express.Router();
 
-// Register user (creates Firebase user and MongoDB profile)
+// Google OAuth routes
+router.get('/google', 
+  passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+router.get('/google/callback',
+  passport.authenticate('google', { session: false }),
+  async (req, res) => {
+    try {
+      // Generate JWT token for the user
+      const token = auth.generateToken({
+        id: req.user._id,
+        email: req.user.email,
+        role: req.user.role
+      });
+      
+      // Redirect to frontend with token
+      res.redirect(`${process.env.FRONTEND_URL}/auth/success?token=${token}`);
+    } catch (error) {
+      res.redirect(`${process.env.FRONTEND_URL}/auth/error`);
+    }
+  }
+);
+
+// Register user
 router.post('/register', async (req, res) => {
   try {
+    console.log('Registration request body:', req.body);
     const { email, password, role, profile } = req.body;
 
-    // Create Firebase user
-    const firebaseUser = await admin.auth().createUser({
-      email,
-      password,
-      displayName: `${profile.firstName} ${profile.lastName}`
-    });
+    // Validate required fields
+    if (!email || !password || !role || !profile) {
+      return res.status(400).json({ error: 'Missing required fields: email, password, role, profile' });
+    }
 
-    // Create MongoDB user profile
+    if (!profile.firstName || !profile.lastName || !profile.phone || !profile.company) {
+      return res.status(400).json({ error: 'Missing profile fields: firstName, lastName, phone, company' });
+    }
+
+    // Check if user exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Create user
     const user = new User({
-      firebaseUid: firebaseUser.uid,
       email,
+      password: hashedPassword,
       role,
       profile
     });
 
     await user.save();
+    console.log('User created successfully:', user.email);
+
+    // Generate token
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
     res.status(201).json({
       message: 'User registered successfully',
+      token,
       user: user.getPublicProfile()
     });
   } catch (error) {
+    console.error('Registration error:', error);
     res.status(400).json({ error: error.message });
+  }
+});
+
+// Login user
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    // Check password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate token
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      message: 'Login successful',
+      token,
+      user: user.getPublicProfile()
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

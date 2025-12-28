@@ -70,6 +70,18 @@ export function AuthProvider({ children }) {
       return response;
     } catch (error) {
       console.error('Registration failed:', error);
+      
+      // Handle specific error cases
+      if (error.response?.data?.error) {
+        const backendError = error.response.data.error;
+        if (backendError === 'User already exists') {
+          throw new Error('An account with this email already exists. Please use a different email or try logging in.');
+        }
+        throw new Error(backendError);
+      } else if (error.code === 'ERR_NETWORK' || error.message.includes('Network Error')) {
+        throw new Error('Cannot connect to server. Please make sure the backend is running.');
+      }
+      
       throw error;
     }
   };

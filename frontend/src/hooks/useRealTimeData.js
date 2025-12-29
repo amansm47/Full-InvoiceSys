@@ -12,6 +12,13 @@ export const useRealTimeData = () => {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    // Skip WebSocket in production (Vercel doesn't support it)
+    if (SOCKET_URL.includes('vercel.app')) {
+      console.log('⚠️ WebSocket disabled on Vercel');
+      setIsConnected(false);
+      return;
+    }
+    
     // Initialize Socket.IO connection
     const token = localStorage.getItem('token');
     

@@ -38,32 +38,41 @@ class WebSocketService {
   
   // Notify all investors about new invoice
   notifyInvestors(invoice) {
-    console.log('Broadcasting new invoice to investors:', invoice.invoiceNumber);
+    console.log('📢 Broadcasting new invoice to all clients:', invoice.invoiceNumber);
     this.io.emit('newInvoiceListed', {
-      id: invoice._id,
+      id: invoice.id,
       invoiceNumber: invoice.invoiceNumber,
       amount: invoice.amount,
       seller: invoice.seller,
       buyer: invoice.buyer,
       dueDate: invoice.dueDate,
-      timestamp: new Date()
+      status: invoice.status,
+      timestamp: invoice.timestamp || new Date()
     });
   }
   
   // Notify specific user about invoice update
   notifyUser(userId, event, data) {
-    const socket = this.clients.get(userId);
+    const userIdStr = userId.toString();
+    const socket = this.clients.get(userIdStr);
     if (socket) {
+      console.log(`🔔 Notifying user ${userIdStr} about ${event}`);
       socket.emit(event, data);
+    } else {
+      console.log(`⚠️ User ${userIdStr} not connected`);
     }
   }
   
   // Notify seller when invoice is funded
   notifySellerFunded(sellerId, invoiceData) {
+    console.log('💰 Notifying seller about funding:', sellerId);
     this.notifyUser(sellerId, 'invoiceFunded', {
-      invoiceId: invoiceData._id,
-      amount: invoiceData.discountedAmount,
-      investor: invoiceData.investor?.name
+      invoiceId: invoiceData.invoiceId || invoiceData._id,
+      invoiceNumber: invoiceData.invoiceNumber,
+      amount: invoiceData.amount,
+      investor: invoiceData.investor,
+      newBalance: invoiceData.newBalance,
+      timestamp: invoiceData.timestamp || new Date()
     });
   }
   
@@ -78,10 +87,12 @@ class WebSocketService {
   
   // Broadcast invoice status updates
   broadcastInvoiceUpdate(invoice) {
+    console.log('📡 Broadcasting invoice update:', invoice.invoiceNumber);
     this.io.emit('invoiceUpdated', {
       id: invoice._id,
       status: invoice.status,
-      invoiceNumber: invoice.invoiceNumber
+      invoiceNumber: invoice.invoiceNumber,
+      timestamp: new Date()
     });
   }
   

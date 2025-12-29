@@ -67,9 +67,9 @@ router.post('/register', async (req, res) => {
     await user.save();
     console.log('User created successfully:', user.email);
 
-    // Generate token
+    // Generate token with userId field
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
+      { userId: user._id.toString(), id: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -108,6 +108,12 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
+    // Check if password exists (for non-OAuth users)
+    if (!user.password) {
+      console.log('No password set for user:', email);
+      return res.status(400).json({ error: 'Please use Google login or reset your password' });
+    }
+
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
@@ -115,9 +121,9 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
-    // Generate token
+    // Generate token with userId field (matching middleware expectation)
     const token = jwt.sign(
-      { id: user._id, email: user.email, role: user.role },
+      { userId: user._id.toString(), id: user._id.toString(), email: user.email, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '7d' }
     );

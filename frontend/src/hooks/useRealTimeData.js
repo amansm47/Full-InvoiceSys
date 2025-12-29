@@ -1,163 +1,145 @@
-import { useEffect, useState, useRef } from 'react';
-import { io } from 'socket.io-client';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from 'react-query';
+import io from 'socket.io-client';
+
+const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5005';
 
 export const useRealTimeData = () => {
-  const { user } = useAuth();
-  const [socket, setSocket] = useState(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [realTimeData, setRealTimeData] = useState({
-    newInvoices: [],
-    portfolioUpdates: null,
-    marketUpdates: null,
-    notifications: []
-  });
-  const reconnectAttempts = useRef(0);
-  const maxReconnectAttempts = 5;
+  const [notifications, setNotifications] = useState([]);
+  const [newInvoices, setNewInvoices] = useState([]);
+  const queryClient = useQueryClient();
+  const socketRef = useRef(null);
 
   useEffect(() => {
-    if (!user) return;
+    // Initialize Socket.IO connection
+    const token = localStorage.getItem('token');
+    
+    socketRef.current = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
 
-    const connectSocket = () => {
-      const newSocket = io(process.env.REACT_APP_API_URL?.replace('/api', '') || 'http://localhost:5005', {
-        transports: ['websocket', 'polling'],
-        timeout: 20000,
-        forceNew: true
-      });
+    const socket = socketRef.current;
 
-      newSocket.on('connect', () => {
-        console.log('WebSocket connected');
-        setIsConnected(true);
-        reconnectAttempts.current = 0;
-        
-        const token = localStorage.getItem('token');
-        if (token) {
-          newSocket.emit('authenticate', token);
-        }
-      });
+    socket.on('connect', () => {
+      console.log('✅ WebSocket connected');
+      setIsConnected(true);
+      
+      // Authenticate with JWT token
+      if (token) {
+        socket.emit('authenticate', token);
+      }
+    });
 
-      newSocket.on('authenticated', (data) => {
-        console.log('WebSocket authenticated:', data);
-      });
+    socket.on('authenticated', (data) => {
+      console.log('🔐 Authenticated:', data);
+    });
 
-      newSocket.on('disconnect', () => {
-        console.log('WebSocket disconnected');
-        setIsConnected(false);
-      });
+    socket.on('disconnect', () => {
+      console.log('❌ WebSocket disconnected');
+      setIsConnected(false);
+    });
 
-      newSocket.on('connect_error', (error) => {
-        console.log('WebSocket connection error:', error);
-        setIsConnected(false);
-        
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          reconnectAttempts.current++;
-          setTimeout(() => {
-            console.log('Reconnecting... Attempt', reconnectAttempts.current);
-            connectSocket();
-          }, 3000 * reconnectAttempts.current);
-        }
-      });
+    socket.on('auth_error', (error) => {
+      console.error('🚫 Auth error:', error);
+    });
 
-      newSocket.on('newInvoiceListed', (invoice) => {
-        console.log('New invoice listed:', invoice);
-        setRealTimeData(prev => ({
-          ...prev,
-          newInvoices: [invoice, ...prev.newInvoices.slice(0, 9)],
-          notifications: [{
-            id: Date.now(),
-            type: 'new_invoice',
-            message: `New invoice ${invoice.invoiceNumber} listed for Rs.${invoice.amount?.toLocaleString()}`,
-            timestamp: new Date(),
-            data: invoice
-          }, ...prev.notifications.slice(0, 19)]
-        }));
-      });
+    // Listen for new invoices
+    socket.on('newInvoiceListed', (invoice) => {
+      console.log('🆕 New invoice listed:', invoice);
+      
+      setNewInvoices(prev => [invoice, ...prev].slice(0, 10));
+      
+      setNotifications(prev => [{
+        id: invoice.id,
+        type: 'new_invoice',
+        title: 'New Investment Opportunity',
+        message: `Invoice ${invoice.invoiceNumber} for ₹${invoice.amount?.toLocaleString()} is now available`,
+        timestamp: new Date(),
+        data: invoice
+      }, ...prev].slice(0, 20));
+      
+      // Refetch marketplace data
+      queryClient.invalidateQueries('marketplace-invoices');
+    });
 
-      newSocket.on('invoiceFunded', (data) => {
-        console.log('Invoice funded:', data);
-        setRealTimeData(prev => ({
-          ...prev,
-          notifications: [{
-            id: Date.now(),
-            type: 'invoice_funded',
-            message: `Your invoice has been funded for Rs.${data.amount?.toLocaleString()}`,
-            timestamp: new Date(),
-            data
-          }, ...prev.notifications.slice(0, 19)]
-        }));
-      });
+    // Listen for invoice funded events
+    socket.on('invoiceFunded', (data) => {
+      console.log('💰 Invoice funded:', data);
+      
+      setNotifications(prev => [{
+        id: data.invoiceId,
+        type: 'invoice_funded',
+        title: 'Invoice Funded!',
+        message: `Your invoice ${data.invoiceNumber} was funded for ₹${data.amount?.toLocaleString()}`,
+        timestamp: new Date(),
+        data
+      }, ...prev].slice(0, 20));
+      
+      // Refetch seller data
+      queryClient.invalidateQueries('seller-invoices');
+      queryClient.invalidateQueries('dashboard');
+    });
 
-      newSocket.on('invoiceRepaid', (data) => {
-        console.log('Invoice repaid:', data);
-        setRealTimeData(prev => ({
-          ...prev,
-          notifications: [{
-            id: Date.now(),
-            type: 'invoice_repaid',
-            message: `Invoice repaid! Profit: Rs.${data.profit?.toLocaleString()}`,
-            timestamp: new Date(),
-            data
-          }, ...prev.notifications.slice(0, 19)]
-        }));
-      });
+    // Listen for investment success
+    socket.on('investmentSuccess', (data) => {
+      console.log('✅ Investment successful:', data);
+      
+      setNotifications(prev => [{
+        id: data.invoiceId,
+        type: 'investment_success',
+        title: 'Investment Successful!',
+        message: `You invested ₹${data.amount?.toLocaleString()} in ${data.invoiceNumber}. Expected profit: ₹${data.profit?.toLocaleString()}`,
+        timestamp: new Date(),
+        data
+      }, ...prev].slice(0, 20));
+      
+      // Refetch investor data
+      queryClient.invalidateQueries('portfolio');
+      queryClient.invalidateQueries('dashboard');
+      queryClient.invalidateQueries('marketplace-invoices');
+    });
 
-      newSocket.on('invoiceUpdated', (invoice) => {
-        console.log('Invoice updated:', invoice);
-        setRealTimeData(prev => ({
-          ...prev,
-          notifications: [{
-            id: Date.now(),
-            type: 'invoice_updated',
-            message: `Invoice ${invoice.invoiceNumber} status: ${invoice.status}`,
-            timestamp: new Date(),
-            data: invoice
-          }, ...prev.notifications.slice(0, 19)]
-        }));
-      });
+    // Listen for invoice updates
+    socket.on('invoiceUpdated', (data) => {
+      console.log('🔄 Invoice updated:', data);
+      
+      // Refetch all relevant queries
+      queryClient.invalidateQueries('marketplace-invoices');
+      queryClient.invalidateQueries('seller-invoices');
+      queryClient.invalidateQueries('portfolio');
+    });
 
-      newSocket.on('marketUpdate', (marketData) => {
-        console.log('Market update:', marketData);
-        setRealTimeData(prev => ({
-          ...prev,
-          marketUpdates: marketData
-        }));
-      });
-
-      newSocket.on('portfolioUpdate', (portfolioData) => {
-        console.log('Portfolio update:', portfolioData);
-        setRealTimeData(prev => ({
-          ...prev,
-          portfolioUpdates: portfolioData
-        }));
-      });
-
-      setSocket(newSocket);
-    };
-
-    connectSocket();
+    // Listen for portfolio updates
+    socket.on('portfolioUpdate', (data) => {
+      console.log('💼 Portfolio updated:', data);
+      queryClient.invalidateQueries('portfolio');
+    });
 
     return () => {
-      if (socket) {
-        socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
       }
     };
-  }, [user]);
+  }, [queryClient]);
 
   const clearNotifications = () => {
-    setRealTimeData(prev => ({ ...prev, notifications: [] }));
+    setNotifications([]);
   };
 
   const removeNotification = (id) => {
-    setRealTimeData(prev => ({
-      ...prev,
-      notifications: prev.notifications.filter(n => n.id !== id)
-    }));
+    setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
   return {
-    socket,
     isConnected,
-    realTimeData,
+    realTimeData: { 
+      notifications,
+      newInvoices
+    },
     clearNotifications,
     removeNotification
   };

@@ -12,7 +12,8 @@ const authenticateToken = async (req, res, next) => {
 
     // Use cloud-enhanced token verification
     const decoded = auth.verifyToken(token);
-    const user = await User.findById(decoded.id);
+    const userId = decoded.userId || decoded.id; // Support both fields
+    const user = await User.findById(userId);
     
     if (!user) {
       return res.status(401).json({ error: 'Invalid token.' });
@@ -28,6 +29,7 @@ const authenticateToken = async (req, res, next) => {
     
     next();
   } catch (error) {
+    console.error('Auth middleware error:', error);
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired' });
     }

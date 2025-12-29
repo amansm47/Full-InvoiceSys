@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { Container, Grid, Card, CardContent, Typography, Button, Box, Chip, Dialog, DialogTitle, DialogContent, TextField, DialogActions } from '@mui/material';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { Container, Grid, Card, CardContent, Typography, Button, Box, Chip, Dialog, DialogTitle, DialogContent, TextField, DialogActions, Alert } from '@mui/material';
+import { useMutation, useQueryClient } from 'react-query';
 import { invoiceAPI } from '../services/api';
+import { useRealTimeQuery } from '../hooks/useRealTimeQuery';
 
 function Marketplace() {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
@@ -9,7 +10,14 @@ function Marketplace() {
   const [openDialog, setOpenDialog] = useState(false);
   
   const queryClient = useQueryClient();
-  const { data: invoices, isLoading } = useQuery('marketplace', invoiceAPI.getMarketplace);
+  const { data: invoices, isLoading, newDataAlert } = useRealTimeQuery(
+    'marketplace',
+    invoiceAPI.getMarketplace,
+    {
+      interval: 10000,
+      onNewData: (newData, oldData) => newData?.length > (oldData?.length || 0)
+    }
+  );
   
   const fundMutation = useMutation(
     ({ invoiceId, discountedAmount }) => invoiceAPI.fund(invoiceId, discountedAmount),
@@ -59,8 +67,14 @@ function Marketplace() {
       </Typography>
       
       <Typography variant="body1" color="text.secondary" gutterBottom>
-        Invest in verified invoices and earn returns
+        Invest in verified invoices and earn returns • Auto-refreshing every 10s
       </Typography>
+
+      {newDataAlert && (
+        <Alert severity="success" sx={{ mt: 2, mb: 2 }}>
+          🎉 New invoices available for investment!
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mt: 2 }}>
         {invoices?.map((invoice) => (

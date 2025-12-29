@@ -76,7 +76,7 @@ export const invoiceAPI = {
     api.get('/invoices/marketplace', { params: filters }).then(res => res.data),
   
   fundInvoice: ({ invoiceId, amount }) => 
-    api.post(`/invoices/${invoiceId}/fund`, { discountedAmount: amount }).then(res => res.data),
+    api.post(`/invoices/${invoiceId}/fund`, { amount }).then(res => res.data),
   
   getInvestorInvoices: () => 
     api.get('/invoices/investor').then(res => res.data),
@@ -108,7 +108,13 @@ export const userAPI = {
     api.get('/users/notifications').then(res => res.data),
   
   updateSettings: (settings) => 
-    api.put('/users/settings', settings).then(res => res.data)
+    api.put('/users/settings', settings).then(res => res.data),
+  
+  getWallet: () => 
+    api.get('/wallet').then(res => res.data),
+  
+  getTransactions: () => 
+    api.get('/wallet/transactions').then(res => res.data)
 };
 
 export const marketplaceAPI = {

@@ -185,6 +185,35 @@ app.get('/api/users/portfolio', auth, async (req, res) => {
   }
 });
 
+// Get invoice status updates (for real-time polling)
+app.get('/api/invoices/updates', auth, async (req, res) => {
+  try {
+    const { lastCheck } = req.query;
+    const userId = req.user.id;
+    const userRole = req.user.role;
+    
+    let query = {};
+    if (userRole === 'seller') {
+      query.sellerId = userId;
+    } else if (userRole === 'investor') {
+      query.investorId = userId;
+    }
+    
+    if (lastCheck) {
+      query.updatedAt = { $gt: new Date(lastCheck) };
+    }
+    
+    const updates = await Invoice.find(query)
+      .sort({ updatedAt: -1 })
+      .limit(10)
+      .select('invoiceNumber status updatedAt details');
+    
+    res.json({ updates, timestamp: new Date() });
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 // Invoice Routes
 app.post('/api/invoices/create', auth, upload.array('documents'), async (req, res) => {
   try {

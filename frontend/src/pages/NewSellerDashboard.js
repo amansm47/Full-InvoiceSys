@@ -309,45 +309,71 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     removeNotification 
   } = useRealTimeData();
   
-  const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError } = useQuery(
+  const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useQuery(
     'seller-dashboard', 
     userAPI.getDashboard, 
     {
-      refetchOnWindowFocus: false,
-      staleTime: 5 * 60 * 1000,
-      refetchInterval: 30000,
+      refetchOnWindowFocus: true,
+      staleTime: 0,
+      cacheTime: 0,
+      refetchInterval: 2000,
       enabled: !!user?.id,
-      retry: 3,
-      onError: (error) => {
-        console.error('Dashboard API Error:', error);
-      }
+      retry: 1
     }
   );
-  const { data: invoices = [], isLoading: invoicesLoading, error: invoicesError } = useQuery(
+  const { data: invoices = [], isLoading: invoicesLoading, error: invoicesError, refetch: refetchInvoices } = useQuery(
     'seller-invoices', 
     invoiceAPI.getSellerInvoices, 
     {
-      refetchOnWindowFocus: false,
-      staleTime: 2 * 60 * 1000,
-      refetchInterval: 15000,
+      refetchOnWindowFocus: true,
+      staleTime: 0,
+      cacheTime: 0,
+      refetchInterval: 2000,
       enabled: !!user?.id,
-      retry: 3
+      retry: 1
     }
   );
+  
+  const { data: wallet, refetch: refetchWallet } = useQuery(
+    'seller-wallet',
+    userAPI.getWallet,
+    {
+      refetchInterval: 2000,
+      staleTime: 0,
+      cacheTime: 0,
+      enabled: !!user?.id,
+      retry: 1
+    }
+  );
+  
+  React.useEffect(() => {
+    const notifications = realTimeData?.notifications || [];
+    if (notifications.some(n => n.type === 'invoice_funded')) {
+      console.log('💰 Refetching all data...');
+      refetchDashboard();
+      refetchInvoices();
+      refetchWallet();
+    }
+  }, [realTimeData?.notifications]);
+  
+  React.useEffect(() => {
+    if (activeSection === 'dashboard') {
+      refetchDashboard();
+      refetchWallet();
+    }
+  }, [activeSection]);
   const { data: analytics } = useQuery('seller-analytics', () => userAPI.getAnalytics('6m'), {
-    refetchOnWindowFocus: false,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    enabled: false
   });
   const { data: marketplaceData } = useQuery('marketplace-investors', marketplaceAPI.getInvestors, {
-    refetchOnWindowFocus: false,
-    staleTime: 15 * 60 * 1000, // 15 minutes
+    enabled: false
   });
 
   // Show loading state
-  if (dashboardLoading || invoicesLoading) {
+  if (dashboardLoading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', bgcolor: '#0f0f23' }}>
-        <Typography sx={{ color: 'white' }}>Loading dashboard...</Typography>
+        <Typography sx={{ color: 'white' }}>Loading...</Typography>
       </Box>
     );
   }
@@ -370,6 +396,14 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
 
   const statCards = [
     { 
+      title: 'Wallet Balance', 
+      value: wallet?.balance || stats.walletBalance || 0, 
+      icon: AttachMoney, 
+      color: '#10b981',
+      prefix: '₹',
+      change: 'Demo Money'
+    },
+    { 
       title: 'Total Invoices', 
       value: stats.totalInvoices || 0, 
       icon: Receipt, 
@@ -379,25 +413,18 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     { 
       title: 'Funded Amount', 
       value: stats.totalFunded || 0, 
-      icon: AttachMoney, 
-      color: '#10b981', 
+      icon: TrendingUp, 
+      color: '#8b5cf6', 
       prefix: '₹',
       change: '+15%'
     },
     { 
       title: 'Success Rate', 
       value: stats.successRate || 0, 
-      icon: TrendingUp, 
+      icon: CheckCircle, 
       color: '#f59e0b', 
       suffix: '%',
       change: '+3%'
-    },
-    { 
-      title: 'Active Invoices', 
-      value: stats.activeInvoices || 0, 
-      icon: CheckCircle, 
-      color: '#8b5cf6',
-      change: '+5'
     }
   ];
 

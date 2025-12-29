@@ -338,7 +338,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     clearNotifications, 
     removeNotification 
   } = useRealTimeData();
-  const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError } = useQuery(
+  const { data: dashboardData, isLoading: dashboardLoading, error: dashboardError, refetch: refetchDashboard } = useQuery(
     'dashboard', 
     userAPI.getDashboard, 
     {
@@ -349,7 +349,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
       retry: 3
     }
   );
-  const { data: portfolio, isLoading: portfolioLoading } = useQuery(
+  const { data: portfolio, isLoading: portfolioLoading, refetch: refetchPortfolio } = useQuery(
     'portfolio', 
     userAPI.getPortfolio, 
     {
@@ -360,7 +360,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
       retry: 3
     }
   );
-  const { data: marketplaceInvoices, isLoading: marketplaceLoading } = useQuery(
+  const { data: marketplaceInvoices, isLoading: marketplaceLoading, refetch: refetchMarketplace } = useQuery(
     'marketplace-invoices', 
     invoiceAPI.getMarketplace, 
     {
@@ -371,6 +371,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
       retry: 3
     }
   );
+  const safeMarketplace = marketplaceInvoices || [];
 
   const handleInvestClick = (invoice) => {
     setSelectedInvoice(invoice);
@@ -383,17 +384,29 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
     
     setInvesting(true);
     try {
-      await invoiceAPI.fundInvoice({
+      const response = await invoiceAPI.fundInvoice({
         invoiceId: selectedInvoice._id,
         amount: parseFloat(investmentAmount)
       });
       
+      console.log('✅ Investment successful:', response);
+      
+      // Close dialog
       setInvestDialogOpen(false);
       setSelectedInvoice(null);
       setInvestmentAmount('');
-      window.location.reload();
+      
+      // Refetch all data
+      await Promise.all([
+        refetchDashboard(),
+        refetchPortfolio(),
+        refetchMarketplace()
+      ]);
+      
+      alert(`Investment successful! Your new balance: ₹${response.walletBalance?.toLocaleString()}`);
     } catch (error) {
       console.error('Investment failed:', error);
+      alert(error.response?.data?.message || 'Investment failed. Please try again.');
     } finally {
       setInvesting(false);
     }
@@ -505,7 +518,7 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
       </Box>
 
       {/* Real-time new invoices section */}
-      {realTimeData.newInvoices.length > 0 && (
+      {realTimeData.newInvoices?.length > 0 && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -669,9 +682,9 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
         Browse and invest in verified invoices from trusted sellers.
       </Typography>
       
-      {marketplaceInvoices && marketplaceInvoices.length > 0 ? (
+      {safeMarketplace && safeMarketplace.length > 0 ? (
         <Grid container spacing={3}>
-          {marketplaceInvoices.map((invoice, index) => (
+          {safeMarketplace.map((invoice, index) => (
             <Grid item xs={12} md={6} lg={4} key={invoice._id}>
               <Card sx={{
                 p: 3,
@@ -883,3 +896,6 @@ const DashboardContent = ({ activeSection, user, setActiveSection }) => {
 };
 
 export default EnhancedInvestorDashboard;
+
+
+

@@ -5,8 +5,14 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 
 // Google OAuth + JWT Authentication
 const auth = {
-  // Initialize Google OAuth Strategy
+  // Initialize Google OAuth Strategy (only if credentials are provided)
   initializeGoogleAuth: () => {
+    // Skip Google OAuth if credentials not provided
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      console.log('⚠️  Google OAuth not configured, skipping...');
+      return;
+    }
+    
     passport.use(new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,

@@ -23,6 +23,14 @@ const wsService = new WebSocketService(server);
 // Make wsService available globally
 app.set('wsService', wsService);
 
+// Reconnect on each request for serverless
+app.use(async (req, res, next) => {
+  if (mongoose.connection.readyState !== 1) {
+    await connectDB();
+  }
+  next();
+});
+
 // Security middleware
 app.use(helmet());
 app.use(compression());
@@ -46,21 +54,36 @@ app.use(passport.session());
 
 app.use('/uploads', express.static('uploads'));
 
-// MongoDB connection with TLS options
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  tls: true,
-  tlsAllowInvalidCertificates: true,
-  serverSelectionTimeoutMS: 5000,
-})
-.then(() => {
-  console.log('✅ Connected to MongoDB');
-})
-.catch(err => {
-  console.error('❌ MongoDB connection error:', err);
-  process.exit(1);
-});
+// MongoDB connection with optimized settings for serverless
+let isConnected = false;
+
+const connectDB = async () => {
+  if (isConnected) {
+    console.log('Using existing MongoDB connection');
+    return;
+  }
+
+  try {
+    const conn = await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      minPoolSize: 1
+    });
+    
+    isConnected = true;
+    console.log('✅ Connected to MongoDB');
+    return conn;
+  } catch (err) {
+    console.error('❌ MongoDB connection error:', err);
+    isConnected = false;
+    throw err;
+  }
+};
+
+connectDB();
 
 // Import models
 const User = require('./models/User');

@@ -77,7 +77,13 @@ router.post('/register', async (req, res) => {
     res.status(201).json({
       message: 'User registered successfully',
       token,
-      user: user.getPublicProfile()
+      user: {
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        profile: user.profile,
+        kyc: user.kyc
+      }
     });
   } catch (error) {
     console.error('Registration error:', error);
@@ -88,17 +94,24 @@ router.post('/register', async (req, res) => {
 // Login user
 router.post('/login', async (req, res) => {
   try {
+    console.log('Login attempt:', req.body.email);
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
 
     // Find user
     const user = await User.findOne({ email });
     if (!user) {
+      console.log('User not found:', email);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
     // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      console.log('Password mismatch for:', email);
       return res.status(400).json({ error: 'Invalid credentials' });
     }
 
@@ -109,12 +122,20 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
+    console.log('Login successful for:', email);
     res.json({
       message: 'Login successful',
       token,
-      user: user.getPublicProfile()
+      user: {
+        _id: user._id,
+        email: user.email,
+        role: user.role,
+        profile: user.profile,
+        kyc: user.kyc
+      }
     });
   } catch (error) {
+    console.error('Login error:', error);
     res.status(500).json({ error: error.message });
   }
 });

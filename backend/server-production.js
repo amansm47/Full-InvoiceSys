@@ -42,17 +42,15 @@ mongoose.connect(process.env.MONGODB_URI, {
 const User = require('./models/User');
 const Invoice = require('./models/Invoice');
 
-// Investment Schema
-const investmentSchema = new mongoose.Schema({
+// Investment Schema - Check if model exists first to avoid recompilation
+const Investment = mongoose.models.Investment || mongoose.model('Investment', new mongoose.Schema({
   investorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   invoiceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Invoice', required: true },
   amount: { type: Number, required: true },
   expectedReturn: { type: Number, required: true },
   actualReturn: Number,
   status: { type: String, enum: ['active', 'completed', 'defaulted'], default: 'active' }
-}, { timestamps: true });
-
-const Investment = mongoose.model('Investment', investmentSchema);
+}, { timestamps: true }));
 
 // Auth middleware
 const { authenticateToken } = require('./middleware/auth');

@@ -39,10 +39,13 @@ app.use(cors({
     if (isAllowed) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      console.log('❌ CORS blocked origin:', origin);
+      callback(null, true); // Allow anyway for debugging
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json());

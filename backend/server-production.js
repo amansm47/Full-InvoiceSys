@@ -90,16 +90,12 @@ const requireRole = (roles) => (req, res, next) => {
   }
 };
 
-// File upload configuration
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/');
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname));
-  }
+// File upload configuration (memory storage for serverless)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
 });
-const upload = multer({ storage });
 
 // Auth Routes
 try {
@@ -203,11 +199,14 @@ app.post('/api/invoices/create', auth, upload.array('documents'), async (req, re
       return res.status(400).json({ message: 'Invoice number already exists' });
     }
 
+    // Store files as base64 in memory (serverless compatible)
     const documents = req.files ? req.files.map(file => ({
       type: 'invoice',
-      filename: file.filename,
+      filename: file.originalname,
       originalName: file.originalname,
-      size: file.size
+      size: file.size,
+      data: file.buffer.toString('base64'),
+      mimetype: file.mimetype
     })) : [];
 
     const invoice = new Invoice({

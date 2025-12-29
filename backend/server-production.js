@@ -22,10 +22,13 @@ app.use(cors({
 app.use(express.json());
 app.use('/uploads', express.static('uploads'));
 
-// MongoDB connection
+// MongoDB connection with TLS options
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
+  tls: true,
+  tlsAllowInvalidCertificates: true,
+  serverSelectionTimeoutMS: 5000,
 })
 .then(() => {
   console.log('✅ Connected to MongoDB');

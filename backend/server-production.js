@@ -101,7 +101,13 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 // Auth Routes
-app.use('/api/auth', require('./routes/auth'));
+try {
+  const authRoutes = require('./routes/auth');
+  app.use('/api/auth', authRoutes);
+  console.log('✅ Auth routes loaded');
+} catch (error) {
+  console.error('❌ Failed to load auth routes:', error.message);
+}
 
 // User Routes
 app.get('/api/users/profile', auth, async (req, res) => {

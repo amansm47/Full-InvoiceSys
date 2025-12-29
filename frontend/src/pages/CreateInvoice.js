@@ -30,6 +30,8 @@ function CreateInvoice() {
     setError('');
 
     try {
+      console.log('Creating invoice with data:', formData);
+      
       const formDataToSend = new FormData();
       Object.keys(formData).forEach(key => {
         formDataToSend.append(key, formData[key]);
@@ -39,14 +41,17 @@ function CreateInvoice() {
         formDataToSend.append('documents', file);
       });
 
-      await invoiceAPI.uploadInvoice(formDataToSend);
+      const response = await invoiceAPI.uploadInvoice(formDataToSend);
+      console.log('Invoice created:', response);
+      
       setSuccess(true);
       
       setTimeout(() => {
         navigate('/dashboard');
       }, 2000);
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to create invoice');
+      console.error('Invoice creation error:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to create invoice');
     } finally {
       setLoading(false);
     }

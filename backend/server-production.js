@@ -4,21 +4,13 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const dotenv = require('dotenv');
-const passport = require('passport');
-const session = require('express-session');
 const multer = require('multer');
 const path = require('path');
-const http = require('http');
-const WebSocketService = require('./services/websocket');
 
 dotenv.config();
 
 const app = express();
-const server = http.createServer(app);
 const PORT = process.env.PORT || 5005;
-
-// Initialize WebSocket service
-const wsService = new WebSocketService(server);
 
 // Security middleware
 app.use(helmet());
@@ -28,28 +20,12 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json());
-
-// Session middleware for Passport
-app.use(session({
-  secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false } // Set to true in production with HTTPS
-}));
-
-// Passport middleware
-app.use(passport.initialize());
-app.use(passport.session());
-
 app.use('/uploads', express.static('uploads'));
 
-// MongoDB connection with TLS options
+// MongoDB connection
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  tls: true,
-  tlsAllowInvalidCertificates: true,
-  serverSelectionTimeoutMS: 5000,
 })
 .then(() => {
   console.log('✅ Connected to MongoDB');
@@ -84,14 +60,6 @@ const requireRole = (roles) => (req, res, next) => {
     next();
   } else {
     res.status(403).json({ message: 'Access denied' });
-  }
-};
-
-const requireKYC = (req, res, next) => {
-  if (req.user.kyc.status === 'verified') {
-    next();
-  } else {
-    res.status(403).json({ message: 'KYC verification required' });
   }
 };
 
@@ -191,10 +159,8 @@ app.get('/api/users/portfolio', auth, async (req, res) => {
 // Invoice Routes
 app.post('/api/invoices/create', auth, upload.array('documents'), async (req, res) => {
   try {
-    console.log('Invoice creation request:', req.body);
-    const { invoiceNumber, buyerName, buyerEmail, amount, dueDate, description, category } = req.body;
+    const { invoiceNumber, buyerName, buyerEmail, amount, dueDate, description } = req.body;
     
-    // Validate required fields
     if (!invoiceNumber || !buyerName || !buyerEmail || !amount || !dueDate) {
       return res.status(400).json({ message: 'Missing required fields' });
     }
@@ -223,7 +189,7 @@ app.post('/api/invoices/create', auth, upload.array('documents'), async (req, re
       financing: {
         requestedAmount: parseFloat(amount)
       },
-      status: 'pending_buyer_confirmation',
+      status: 'listed',
       documents,
       metadata: {
         source: 'web'
@@ -231,25 +197,6 @@ app.post('/api/invoices/create', auth, upload.array('documents'), async (req, re
     });
 
     await invoice.save();
-    console.log('Invoice created:', invoice._id);
-    
-    // Automatically list invoice in marketplace for investors
-    invoice.status = 'listed';
-    invoice.workflow.listedAt = new Date();
-    await invoice.save();
-    
-    // Notify all investors about new invoice via WebSocket
-    if (wsService && typeof wsService.notifyInvestors === 'function') {
-      const notificationData = {
-        _id: invoice._id,
-        invoiceNumber: invoice.invoiceNumber,
-        amount: invoice.details.amount,
-        seller: req.user.profile?.company || req.user.email,
-        buyer: buyerName,
-        dueDate: invoice.details.dueDate
-      };
-      wsService.notifyInvestors(notificationData);
-    }
     
     res.status(201).json({ 
       message: 'Invoice created successfully', 
@@ -267,7 +214,6 @@ app.post('/api/invoices/create', auth, upload.array('documents'), async (req, re
   }
 });
 
-// Buyer confirms invoice
 app.post('/api/invoices/:id/confirm', auth, requireRole(['buyer']), async (req, res) => {
   try {
     const { confirmed, notes } = req.body;
@@ -286,18 +232,6 @@ app.post('/api/invoices/:id/confirm', auth, requireRole(['buyer']), async (req, 
     };
     
     await invoice.save();
-    
-    // Notify seller and broadcast update
-    wsService.notifyUser(invoice.sellerId, 'invoiceUpdated', {
-      invoiceId: invoice._id,
-      status: invoice.status,
-      message: confirmed ? 'Invoice verified by buyer' : 'Invoice rejected by buyer'
-    });
-    
-    if (confirmed) {
-      wsService.notifyInvestors(invoice);
-    }
-    
     res.json({ message: 'Invoice confirmation updated', invoice });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -310,7 +244,6 @@ app.get('/api/invoices/seller', auth, async (req, res) => {
       .sort({ createdAt: -1 })
       .populate('investorId', 'name email');
     
-    // Transform invoices to match frontend expectations
     const transformedInvoices = invoices.map(invoice => ({
       _id: invoice._id,
       invoiceNumber: invoice.invoiceNumber,
@@ -325,7 +258,6 @@ app.get('/api/invoices/seller', auth, async (req, res) => {
     
     res.json(transformedInvoices);
   } catch (error) {
-    console.error('Get seller invoices error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
@@ -339,7 +271,6 @@ app.get('/api/invoices/marketplace', auth, async (req, res) => {
     .populate('sellerId', 'name company profile')
     .sort({ createdAt: -1 });
     
-    // Transform invoices for marketplace display
     const marketplaceInvoices = invoices.map(invoice => ({
       _id: invoice._id,
       invoiceNumber: invoice.invoiceNumber,
@@ -359,12 +290,10 @@ app.get('/api/invoices/marketplace', auth, async (req, res) => {
     
     res.json(marketplaceInvoices);
   } catch (error) {
-    console.error('Marketplace error:', error);
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Update invoice status (for testing)
 app.put('/api/invoices/:id', auth, async (req, res) => {
   try {
     const { status } = req.body;
@@ -376,11 +305,6 @@ app.put('/api/invoices/:id', auth, async (req, res) => {
     
     invoice.status = status;
     await invoice.save();
-    
-    if (status === 'verified') {
-      wsService.notifyInvestors(invoice);
-    }
-    
     res.json({ message: 'Invoice status updated', invoice });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -397,7 +321,7 @@ app.post('/api/invoices/:id/fund', auth, requireRole(['investor']), async (req, 
       return res.status(404).json({ message: 'Invoice not found' });
     }
 
-    if (invoice.status !== 'verified') {
+    if (invoice.status !== 'verified' && invoice.status !== 'listed') {
       return res.status(400).json({ message: 'Invoice not available for funding' });
     }
 
@@ -412,45 +336,33 @@ app.post('/api/invoices/:id/fund', auth, requireRole(['investor']), async (req, 
     
     await invoice.save();
 
-    // Create investment record
     const investment = new Investment({
       investorId: req.user.id,
       invoiceId: invoice._id,
       amount: parseFloat(discountedAmount),
-      expectedReturn: invoice.amount
+      expectedReturn: invoice.details.amount
     });
     
     await investment.save();
-
-    // Notify seller about funding via WebSocket
-    wsService.notifySellerFunded(invoice.sellerId._id, {
-      ...invoice.toObject(),
-      investor: { name: req.user.name }
-    });
-    
-    // Broadcast invoice update to all users
-    wsService.broadcastInvoiceUpdate(invoice);
 
     res.json({ 
       message: 'Invoice funded successfully', 
       invoice,
       investment,
-      profit: invoice.amount - parseFloat(discountedAmount)
+      profit: invoice.details.amount - parseFloat(discountedAmount)
     });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
   }
 });
 
-// Marketplace Routes
 app.get('/api/marketplace/investors', auth, async (req, res) => {
   try {
     const investors = await User.find({ 
       role: 'investor',
-      kycStatus: 'verified'
+      'kyc.status': 'verified'
     }).select('name email company');
     
-    // Add mock data for demo
     const investorsWithData = investors.map(investor => ({
       ...investor.toObject(),
       interestRate: '8-12%',
@@ -467,7 +379,6 @@ app.get('/api/marketplace/investors', auth, async (req, res) => {
 
 app.post('/api/marketplace/connect/:investorId', auth, async (req, res) => {
   try {
-    // In a real app, this would create a connection request
     res.json({ message: 'Connection request sent successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Server error', error: error.message });
@@ -478,28 +389,32 @@ app.post('/api/marketplace/connect/:investorId', auth, async (req, res) => {
 app.get('/health', (req, res) => {
   res.json({
     success: true,
-    message: 'BLC Enhanced Server Running',
+    message: 'BLC Server Running',
     timestamp: new Date().toISOString(),
-    features: ['Enhanced Auth', 'JWT Tokens', 'OTP Verification', 'Rate Limiting']
+    environment: process.env.NODE_ENV
   });
 });
 
-// Clean expired tokens every hour
-setInterval(async () => {
-  try {
-    await authService.cleanExpiredTokens();
-    console.log('🧹 Cleaned expired tokens');
-  } catch (error) {
-    console.error('❌ Error cleaning tokens:', error);
-  }
-}, 60 * 60 * 1000);
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Invoice Financing Platform API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth/*',
+      invoices: '/api/invoices/*',
+      users: '/api/users/*',
+      marketplace: '/api/marketplace/*'
+    }
+  });
+});
 
 // Start server
-server.listen(PORT, () => {
-  console.log(`🚀 BLC Enhanced Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📊 Health check: http://localhost:${PORT}/health`);
-  console.log(`🔐 Enhanced authentication active`);
-  console.log(`🔌 WebSocket server initialized`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV}`);
 });
 
 module.exports = app;
